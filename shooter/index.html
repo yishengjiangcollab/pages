@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+
+	<script type="module">
+		if ('CSS' in window && 'registerProperty' in CSS) {
+			CSS.registerProperty({
+				name: '--positionX',
+				syntax: '<number>',
+				inherits: false,
+				initialValue: '22'
+			});
+			CSS.registerProperty({
+				name: '--positionY',
+				syntax: '<number>',
+				inherits: false,
+				initialValue: '12'
+			});
+			CSS.registerProperty({
+				name: '--headTurnDegree',
+				syntax: '<angle>',
+				inherits: false,
+				initialValue: '180deg'
+			});
+		}
+		CSS.paintWorklet.addModule('doom-worklet.js');
+	</script>
+
+	<style>
+		.doom {
+			width: 1000px;
+			/* Matches typical raycaster width for performance */
+			height: 480px;
+			background-image: paint(doom);
+		}
+
+	</style>
+</head>
+<body>
+	<div class="doom"></div>
+
+	<script>
+		// Duplicate map for collision in JS
+		const worldMap = [
+			[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 0, 0, 0, 0, 3, 0, 3, 0, 3, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0, 0, 0, 3, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 2, 2, 0, 2, 2, 0, 0, 0, 0, 3, 0, 3, 0, 3, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+			[1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1],
+			[1, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1],
+			[1, 4, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1],
+			[1, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 1],
+			[1, 4, 0, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1],
+			[1, 4, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1],
+			[1, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 1],
+			[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+		];
+
+		const elem = document.querySelector('.doom');
+		const keys = {};
+		window.addEventListener('keydown', e => keys[e.key] = true);
+		window.addEventListener('keyup', e => keys[e.key] = false);
+
+		let posX = 22;
+		let posY = 12;
+		let angle = 180;
+
+		const moveSpeed = 0.1;
+		const rotSpeed = 3; // degrees per frame
+
+		function animate() {
+			// Compute direction from angle
+			const angleRad = angle * Math.PI / 180;
+			const dirX = Math.cos(angleRad);
+			const dirY = Math.sin(angleRad);
+			const perpX = dirY; // Perp for strafe (matches plane direction sign)
+			const perpY = -dirX;
+
+			// Forward
+			if (keys['w']) {
+				const newX = posX + dirX * moveSpeed;
+				const newY = posY + dirY * moveSpeed;
+				if (worldMap[Math.floor(newX)][Math.floor(newY)] === 0) {
+					posX = newX;
+					posY = newY;
+				}
+			}
+			// Backward
+			if (keys['s']) {
+				const newX = posX - dirX * moveSpeed;
+				const newY = posY - dirY * moveSpeed;
+				if (worldMap[Math.floor(newX)][Math.floor(newY)] === 0) {
+					posX = newX;
+					posY = newY;
+				}
+			}
+			// Strafe left
+			if (keys['a']) {
+				const newX = posX - perpX * moveSpeed;
+				const newY = posY - perpY * moveSpeed;
+				if (worldMap[Math.floor(newX)][Math.floor(newY)] === 0) {
+					posX = newX;
+					posY = newY;
+				}
+			}
+			// Strafe right
+			if (keys['d']) {
+				const newX = posX + perpX * moveSpeed;
+				const newY = posY + perpY * moveSpeed;
+				if (worldMap[Math.floor(newX)][Math.floor(newY)] === 0) {
+					posX = newX;
+					posY = newY;
+				}
+			}
+			// Rotate left
+			if (keys['ArrowLeft']) {
+				angle += rotSpeed;
+			}
+			// Rotate right
+			if (keys['ArrowRight']) {
+				angle -= rotSpeed;
+			}
+
+			// Update CSS properties to trigger repaint
+			elem.style.setProperty('--positionX', posX);
+			elem.style.setProperty('--positionY', posY);
+			elem.style.setProperty('--headTurnDegree', `${angle}deg`);
+
+			requestAnimationFrame(animate);
+		}
+		animate();
+	</script>
+</body>
+</html>
